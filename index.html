@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#060a1f">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Aurora Drift — Spatial Healing Tone</title>
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" href="./icon-192.png">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<style>
+  :root{
+    --void:#04060f;
+    --deep:#0a1440;
+    --midblue:#173a7a;
+    --ice:#8fd6ff;
+    --white:#f4faff;
+    --glass: rgba(15, 26, 61, 0.55);
+    --glass-border: rgba(180, 220, 255, 0.18);
+    --sbw: 74px;
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; }
+  html,body{
+    margin:0; padding:0; width:100%; height:100%;
+    background:var(--void);
+    overflow:hidden;
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    touch-action:none;
+    overscroll-behavior:none;
+  }
+  #stage{
+    position:fixed; inset:0;
+    display:block;
+    width:100vw; height:100vh;
+  }
+  #startOverlay{
+    position:fixed; inset:0; z-index:50;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background: radial-gradient(circle at 50% 40%, #0d1f5c 0%, #050914 75%);
+    text-align:center; padding:32px;
+    transition: opacity 0.9s ease;
+  }
+  #startOverlay h1{
+    font-weight:300; letter-spacing:0.12em; font-size:clamp(24px,7vw,38px);
+    color:var(--white); margin:0 0 6px 0; text-transform:uppercase;
+  }
+  #startOverlay p{
+    color:#a9c3ef; font-size:14px; max-width:340px; line-height:1.6; margin:10px 0 30px;
+    font-weight:300;
+  }
+  #beginBtn{
+    padding:16px 46px; border-radius:40px; border:1px solid var(--glass-border);
+    background:linear-gradient(135deg, rgba(143,214,255,0.25), rgba(23,58,122,0.4));
+    color:var(--white); font-size:16px; letter-spacing:0.08em; text-transform:uppercase;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 0 40px rgba(143,214,255,0.25);
+  }
+  #beginBtn:active{ transform:scale(0.96); }
+
+  #hint{
+    position:fixed; top:44%; left:0; right:var(--sbw); text-align:center; z-index:10;
+    color:rgba(220,235,255,0.55); font-size:12px; letter-spacing:0.08em; pointer-events:none;
+    transition: opacity 1.2s ease; font-weight:300;
+  }
+
+  #touchBar{
+    position:fixed; left:0; right:var(--sbw); bottom:0; z-index:15;
+    height: calc(128px + env(safe-area-inset-bottom,0px));
+    background: linear-gradient(to top, rgba(6,9,22,0.75), rgba(6,9,22,0.15) 80%, transparent);
+    border-top:1px solid var(--glass-border);
+  }
+  #touchTrackLabel{
+    position:absolute; top:8px; left:0; right:0; text-align:center;
+    color:rgba(200,222,250,0.4); font-size:9px; letter-spacing:0.16em; text-transform:uppercase;
+  }
+  #touchHandle{
+    position:absolute; width:16px; height:16px; margin:-8px 0 0 -8px;
+    border-radius:50%; background:radial-gradient(circle, #fff, #8fd6ff);
+    box-shadow:0 0 16px 4px rgba(143,214,255,0.6);
+    left:50%; top:50%; pointer-events:none;
+  }
+
+  #sidebar{
+    position:fixed; top:0; right:0; bottom:0; width:var(--sbw); z-index:25;
+    background:var(--glass); border-left:1px solid var(--glass-border);
+    backdrop-filter: blur(10px);
+    padding: calc(10px + env(safe-area-inset-top,0px)) 6px calc(10px + env(safe-area-inset-bottom,0px));
+    display:flex; flex-direction:column; align-items:center; gap:10px;
+    overflow-y:auto;
+  }
+  #sidebar::-webkit-scrollbar{ display:none; }
+  .sbDivider{ width:70%; height:1px; background:var(--glass-border); margin:2px 0; flex-shrink:0; }
+  .sbLabel{
+    color:#8fb3e8; font-size:8px; letter-spacing:0.1em; text-transform:uppercase;
+    text-align:center; font-weight:600; flex-shrink:0;
+  }
+  #playPause{
+    width:38px; height:38px; border-radius:50%; flex-shrink:0;
+    background:rgba(143,214,255,0.14); border:1px solid var(--glass-border); color:#fff;
+    font-size:14px; display:flex; align-items:center; justify-content:center;
+  }
+  .miniBtn{
+    width:34px; height:26px; border-radius:8px; flex-shrink:0;
+    border:1px solid var(--glass-border); background:rgba(143,214,255,0.1); color:#fff;
+    font-size:15px; display:flex; align-items:center; justify-content:center;
+  }
+  .miniBtn:active{ background:rgba(143,214,255,0.3); }
+  #freqVal{ color:#fff; font-size:13px; font-weight:300; text-align:center; flex-shrink:0; }
+  .chipCol{ display:flex; flex-direction:column; gap:4px; width:100%; align-items:center; flex-shrink:0; }
+  .chip{
+    width:60px; padding:4px 0; border-radius:10px; font-size:9px; text-align:center;
+    border:1px solid var(--glass-border); background:rgba(255,255,255,0.04); color:#bcd4f5;
+  }
+  .chip.active{ background:rgba(143,214,255,0.35); color:#04142c; border-color:transparent; font-weight:700; }
+
+  .vWrap{ width:40px; height:96px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  input[type=range]{
+    -webkit-appearance:none; outline:none; background:transparent;
+  }
+  input.vSlider[type=range]{
+    width:84px; height:4px;
+    transform: rotate(-90deg);
+    border-radius:2px;
+    background: linear-gradient(to right, var(--ice), rgba(255,255,255,0.15));
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:16px; height:16px; border-radius:50%;
+    background:var(--white); box-shadow:0 0 8px rgba(143,214,255,0.9); cursor:pointer;
+  }
+  .toggleRow{ display:flex; flex-direction:column; gap:4px; width:100%; align-items:center; flex-shrink:0; }
+  .toggleBtnSm{
+    width:60px; padding:4px 0; border-radius:8px; text-align:center; font-size:9px;
+    border:1px solid var(--glass-border); background:rgba(255,255,255,0.03); color:#bcd4f5;
+  }
+  .toggleBtnSm.active{ background:rgba(143,214,255,0.3); color:#fff; border-color:rgba(143,214,255,0.6); }
+</style>
+</head>
+<body>
+
+<canvas id="stage"></canvas>
+<div id="hint">drag your thumb along the bar below</div>
+
+<div id="touchBar">
+  <div id="touchTrackLabel">Move the orb</div>
+  <div id="touchHandle"></div>
+</div>
+
+<div id="sidebar">
+  <button id="playPause">⏸</button>
+  <div class="sbDivider"></div>
+
+  <span class="sbLabel">Hz</span>
+  <button class="miniBtn" id="freqUp">+</button>
+  <div id="freqVal">136</div>
+  <button class="miniBtn" id="freqDown">−</button>
+  <div class="chipCol" id="chips"></div>
+
+  <div class="sbDivider"></div>
+
+  <span class="sbLabel">Master</span>
+  <div class="vWrap"><input type="range" class="vSlider" id="volumeSlider" min="0" max="100" value="52"></div>
+
+  <span class="sbLabel">Tone</span>
+  <div class="vWrap"><input type="range" class="vSlider" id="humVolSlider" min="0" max="100" value="34"></div>
+
+  <div class="sbDivider"></div>
+
+  <span class="sbLabel">Heart</span>
+  <div class="vWrap"><input type="range" class="vSlider" id="hbVolSlider" min="0" max="100" value="85"></div>
+  <div class="toggleRow">
+    <button class="toggleBtnSm active" data-hb="on">On</button>
+    <button class="toggleBtnSm" data-hb="off">Off</button>
+  </div>
+
+  <div class="sbDivider"></div>
+
+  <span class="sbLabel">Rhythm</span>
+  <div class="vWrap"><input type="range" class="vSlider" id="rhythmVolSlider" min="0" max="100" value="55"></div>
+  <div class="toggleRow">
+    <button class="toggleBtnSm active" data-rhythm="none">None</button>
+    <button class="toggleBtnSm" data-rhythm="drum">Drum</button>
+    <button class="toggleBtnSm" data-rhythm="bowl">Bowl</button>
+  </div>
+  <div style="height:6px;flex-shrink:0;"></div>
+</div>
+
+<div id="startOverlay">
+  <h1>Aurora Drift</h1>
+  <p>A gentle spatial healing tone that follows your thumb along the bar below — side to side, and near to far. Best experienced with headphones.</p>
+  <button id="beginBtn">Begin</button>
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', ()=>{
+      navigator.serviceWorker.register('./sw.js').catch(()=>{});
+    });
+  }
+
+  const canvas = document.getElementById('stage');
+  const ctx = canvas.getContext('2d');
+  let W, H, DPR;
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W * DPR; canvas.height = H * DPR;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  const PALETTE = ['#eaf6ff', '#bfe6ff', '#8fd6ff', '#5aa8ec', '#3a6fd8', '#ffffff'];
+  const N = 140;
+  const particles = [];
+  for(let i=0;i<N;i++){
+    particles.push({
+      x: Math.random(), y: Math.random(),
+      baseR: Math.random()*1.6 + 0.5,
+      depth: Math.random(),
+      phase: Math.random()*Math.PI*2,
+      speed: Math.random()*0.4 + 0.15,
+      color: PALETTE[Math.floor(Math.random()*PALETTE.length)],
+      drift: (Math.random()-0.5)*0.00012
+    });
+  }
+
+  let touchX = 0.5, touchY = 0.5;
+  let smoothX = 0.5, smoothY = 0.5;
+  let active = false;
+
+  const touchBar = document.getElementById('touchBar');
+  const touchHandle = document.getElementById('touchHandle');
+  function setTouchFromEvent(clientX, clientY){
+    const rect = touchBar.getBoundingClientRect();
+    touchX = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    touchY = Math.min(1, Math.max(0, (clientY - rect.top) / rect.height));
+    active = true;
+    document.getElementById('hint').style.opacity = 0;
+    touchHandle.style.left = (touchX*100) + '%';
+    touchHandle.style.top = (touchY*100) + '%';
+  }
+  touchBar.addEventListener('touchstart', e=>{ const t=e.touches[0]; setTouchFromEvent(t.clientX,t.clientY); }, {passive:true});
+  touchBar.addEventListener('touchmove', e=>{ const t=e.touches[0]; setTouchFromEvent(t.clientX,t.clientY); }, {passive:true});
+  touchBar.addEventListener('mousedown', e=> setTouchFromEvent(e.clientX, e.clientY));
+  touchBar.addEventListener('mousemove', e=>{ if(e.buttons===1) setTouchFromEvent(e.clientX, e.clientY); });
+
+  const ORB_ARC_COUNT = 14;
+  function makeArc(){
+    const angle = Math.random()*Math.PI*2;
+    const segs = 5;
+    const len = 22 + Math.random()*30;
+    const pts = [];
+    let x=0,y=0, a=angle;
+    const stepLen = len/segs;
+    for(let i=0;i<segs;i++){
+      a += (Math.random()-0.5)*1.1;
+      x += Math.cos(a)*stepLen;
+      y += Math.sin(a)*stepLen;
+      pts.push({x,y});
+    }
+    return { pts, life: 4+Math.random()*7, maxLife: 10 };
+  }
+  const orbArcs = [];
+  for(let i=0;i<ORB_ARC_COUNT;i++) orbArcs.push(makeArc());
+
+  const SPARKLE_COUNT = 18;
+  const sparkleDots = [];
+  for(let i=0;i<SPARKLE_COUNT;i++){
+    sparkleDots.push({
+      angle: Math.random()*Math.PI*2,
+      rFactor: 0.85 + Math.random()*0.9,
+      phase: Math.random()*Math.PI*2,
+      speed: (Math.random()-0.5)*1.3
+    });
+  }
+  let orbPulsePhase = 0;
+
+  function drawOrb(cx, cy, closeness, dt){
+    orbPulsePhase += dt * 1.5;
+    const pulse = (Math.sin(orbPulsePhase)+1)/2;
+    const flicker = (Math.sin(orbPulsePhase*6.1)+1)/2;
+    const radius = 24 + pulse*7 + closeness*11;
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+
+    ctx.filter = 'blur(16px)';
+    const aura = ctx.createRadialGradient(cx,cy,0, cx,cy, radius*3.4);
+    aura.addColorStop(0, 'rgba(150,210,255,0.4)');
+    aura.addColorStop(1, 'rgba(60,120,220,0)');
+    ctx.fillStyle = aura;
+    ctx.beginPath(); ctx.arc(cx,cy, radius*3.4, 0, Math.PI*2); ctx.fill();
+    ctx.filter = 'none';
+
+    const glow = ctx.createRadialGradient(cx,cy,0, cx,cy, radius*2.1);
+    glow.addColorStop(0, 'rgba(215,238,255,0.38)');
+    glow.addColorStop(1, 'rgba(120,190,255,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(cx,cy, radius*2.1, 0, Math.PI*2); ctx.fill();
+
+    const scale = radius/30;
+    for(let i=0;i<orbArcs.length;i++){
+      orbArcs[i].life -= dt*15;
+      if(orbArcs[i].life <= 0){ orbArcs[i] = makeArc(); continue; }
+      const a = orbArcs[i];
+      const alpha = Math.max(0, a.life/a.maxLife) * (0.3 + flicker*0.5);
+      ctx.beginPath();
+      ctx.moveTo(cx,cy);
+      a.pts.forEach(p=> ctx.lineTo(cx+p.x*scale, cy+p.y*scale));
+      ctx.strokeStyle = `rgba(205,232,255,${alpha})`;
+      ctx.lineWidth = 0.7;
+      ctx.stroke();
+    }
+
+    sparkleDots.forEach(s=>{
+      s.angle += dt * s.speed;
+      const tw = (Math.sin(orbPulsePhase*3 + s.phase)+1)/2;
+      const dx = cx + Math.cos(s.angle) * radius * s.rFactor;
+      const dy = cy + Math.sin(s.angle) * radius * s.rFactor * 0.9;
+      ctx.beginPath();
+      ctx.fillStyle = `rgba(255,255,255,${0.25+tw*0.6})`;
+      ctx.arc(dx, dy, 0.9 + tw*1.1, 0, Math.PI*2);
+      ctx.fill();
+    });
+
+    const core = ctx.createRadialGradient(cx,cy,0, cx,cy, radius*0.62);
+    core.addColorStop(0, 'rgba(255,255,255,0.88)');
+    core.addColorStop(0.5, 'rgba(200,232,255,0.65)');
+    core.addColorStop(1, 'rgba(120,180,240,0.12)');
+    ctx.fillStyle = core;
+    ctx.beginPath(); ctx.arc(cx,cy, radius*(0.55+pulse*0.1), 0, Math.PI*2); ctx.fill();
+
+    ctx.restore();
+  }
+
+  let t0 = performance.now();
+  function draw(now){
+    const dt = (now - t0)/1000; t0 = now;
+    smoothX += (touchX - smoothX) * 0.08;
+    smoothY += (touchY - smoothY) * 0.08;
+
+    ctx.clearRect(0,0,W,H);
+    const gx = W * (0.3 + smoothX*0.4);
+    const gy = H * (0.25 + smoothY*0.35);
+    const g = ctx.createRadialGradient(gx,gy, 0, gx,gy, Math.max(W,H)*0.75);
+    g.addColorStop(0, 'rgba(40,80,160,0.35)');
+    g.addColorStop(0.5, 'rgba(10,20,60,0.25)');
+    g.addColorStop(1, 'rgba(3,5,14,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0,0,W,H);
+
+    const offsetX = (smoothX - 0.5) * 60;
+    const closeness = smoothY;
+
+    for(const p of particles){
+      p.phase += dt * p.speed;
+      p.x += p.drift;
+      if(p.x>1) p.x=0; if(p.x<0) p.x=1;
+
+      const parX = offsetX * (0.3 + p.depth*1.4) / W;
+      const scaleBoost = 0.6 + closeness*0.9 * (0.4 + p.depth*0.9);
+      const px = (p.x + parX) * W;
+      const py = p.y * H;
+      const twinkle = (Math.sin(p.phase)+1)/2;
+      const r = p.baseR * scaleBoost * (0.6 + twinkle*0.8) * (1 + p.depth*1.2);
+      const alpha = (0.25 + twinkle*0.55) * (0.5 + p.depth*0.6);
+
+      ctx.beginPath();
+      ctx.fillStyle = p.color;
+      ctx.globalAlpha = Math.min(1,alpha);
+      ctx.arc(px, py, Math.max(0.3,r), 0, Math.PI*2);
+      ctx.fill();
+
+      if(twinkle > 0.85 && p.depth > 0.6){
+        ctx.globalAlpha = (twinkle-0.85)/0.15 * 0.5;
+        ctx.beginPath();
+        ctx.moveTo(px-r*3, py); ctx.lineTo(px+r*3, py);
+        ctx.moveTo(px, py-r*3); ctx.lineTo(px, py+r*3);
+        ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 0.6;
+        ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1;
+
+    const orbX = smoothX * W;
+    const orbY = H * (0.56 - closeness*0.24);
+    drawOrb(orbX, orbY, closeness, dt);
+
+    requestAnimationFrame(draw);
+  }
+  requestAnimationFrame(draw);
+
+  let actx = null;
+  let masterGain, humGain, hbGain, hbFilter, rhythmGain;
+  let panner, osc1, osc2, subOsc, filter, filter2, breathLFO, filterLFO;
+  let running = false;
+  let hbTimer = null, rhythmTimer = null;
+  let baseFreq = 136.1;
+  let rhythmMode = 'none';
+  let heartbeatOn = true;
+
+  const SOLFEGGIO = [174, 285, 396];
+
+  function buildGraph(){
+    masterGain = actx.createGain();
+    masterGain.gain.value = 0.52;
+    masterGain.connect(actx.destination);
+
+    panner = actx.createPanner();
+    panner.panningModel = 'HRTF';
+    panner.distanceModel = 'inverse';
+    panner.refDistance = 1;
+    panner.maxDistance = 12;
+    panner.rolloffFactor = 1;
+    panner.positionX.value = 0;
+    panner.positionY.value = 0;
+    panner.positionZ.value = -2;
+
+    filter = actx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 560;
+    filter.Q.value = 0.3;
+
+    filter2 = actx.createBiquadFilter();
+    filter2.type = 'lowpass';
+    filter2.frequency.value = 480;
+    filter2.Q.value = 0.25;
+
+    humGain = actx.createGain();
+    humGain.gain.value = 0.34;
+
+    osc1 = actx.createOscillator(); osc1.type='sine'; osc1.frequency.value = baseFreq;
+    osc2 = actx.createOscillator(); osc2.type='sine'; osc2.frequency.value = baseFreq*1.003;
+    const osc2Gain = actx.createGain(); osc2Gain.gain.value = 0.26;
+    subOsc = actx.createOscillator(); subOsc.type='sine'; subOsc.frequency.value = baseFreq*0.5;
+    const subGain = actx.createGain(); subGain.gain.value = 0.2;
+
+    osc1.connect(filter);
+    osc2.connect(osc2Gain).connect(filter);
+    subOsc.connect(subGain).connect(filter);
+    filter.connect(filter2);
+    filter2.connect(panner);
+    panner.connect(humGain);
+    humGain.connect(masterGain);
+
+    osc1.start(); osc2.start(); subOsc.start();
+
+    breathLFO = actx.createOscillator(); breathLFO.type='sine'; breathLFO.frequency.value = 0.045;
+    const breathDepth = actx.createGain(); breathDepth.gain.value = 0.1;
+    breathLFO.connect(breathDepth).connect(humGain.gain);
+    breathLFO.start();
+
+    filterLFO = actx.createOscillator(); filterLFO.type='sine'; filterLFO.frequency.value = 0.035;
+    const filterDepth = actx.createGain(); filterDepth.gain.value = 90;
+    filterLFO.connect(filterDepth).connect(filter.frequency);
+    filterLFO.start();
+
+    hbGain = actx.createGain();
+    hbGain.gain.value = 0.85;
+    hbFilter = actx.createBiquadFilter();
+    hbFilter.type = 'lowpass';
+    hbFilter.frequency.value = 160;
+    hbFilter.Q.value = 0.5;
+    hbGain.connect(hbFilter);
+    hbFilter.connect(masterGain);
+
+    rhythmGain = actx.createGain();
+    rhythmGain.gain.value = 0.55;
+    rhythmGain.connect(masterGain);
+  }
+
+  function playThump(delay, freq, dur, gainVal, dest){
+    const t = actx.currentTime + delay;
+    const o = actx.createOscillator();
+    o.type = 'sine';
+    const g = actx.createGain();
+    o.frequency.setValueAtTime(freq, t);
+    o.frequency.exponentialRampToValueAtTime(freq*0.6, t+dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(gainVal, t+0.025);
+    g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
+    o.connect(g).connect(dest);
+    o.start(t); o.stop(t+dur+0.05);
+  }
+
+  function scheduleHeartbeat(){
+    if(hbTimer) clearInterval(hbTimer);
+    const bpm = 46;
+    const interval = 60000/bpm;
+    function beat(){
+      if(!heartbeatOn) return;
+      playThump(0,    32, 0.4,  0.55, hbGain);
+      playThump(0,    55, 0.26, 1.0,  hbGain);
+      playThump(0.17, 42, 0.34, 0.78, hbGain);
+    }
+    beat();
+    hbTimer = setInterval(beat, interval);
+  }
+
+  function playDrum(){
+    playThump(0, 90, 0.5, 0.7, rhythmGain);
+  }
+  function playBowl(){
+    const t = actx.currentTime + 0.02;
+    const partials = [1, 2.41, 3.83, 5.2];
+    const bowlGain = actx.createGain();
+    bowlGain.gain.setValueAtTime(0.0001, t);
+    bowlGain.gain.exponentialRampToValueAtTime(0.5, t+1.2);
+    bowlGain.gain.exponentialRampToValueAtTime(0.0001, t+7.5);
+    bowlGain.connect(rhythmGain);
+    partials.forEach((mult, i)=>{
+      const o = actx.createOscillator();
+      o.type = 'sine';
+      o.frequency.value = 210 * mult;
+      const pg = actx.createGain();
+      pg.gain.value = 1/(i+1.4);
+      o.connect(pg).connect(bowlGain);
+      o.start(t); o.stop(t+7.6);
+    });
+  }
+
+  function scheduleRhythm(mode){
+    if(rhythmTimer) clearInterval(rhythmTimer);
+    rhythmTimer = null;
+    if(mode === 'drum'){
+      playDrum();
+      rhythmTimer = setInterval(playDrum, 2400);
+    } else if(mode === 'bowl'){
+      playBowl();
+      rhythmTimer = setInterval(playBowl, 11000);
+    }
+  }
+
+  function updateSpatial(){
+    if(!panner) return;
+    const x = (smoothX - 0.5) * 6;
+    const z = -4 + smoothY * 6;
+    const now = actx.currentTime;
+    panner.positionX.linearRampToValueAtTime(x, now+0.08);
+    panner.positionZ.linearRampToValueAtTime(z, now+0.08);
+  }
+  setInterval(updateSpatial, 90);
+
+  function setFreq(f){
+    baseFreq = Math.max(60, Math.min(396, f));
+    if(osc1){
+      const now = actx.currentTime;
+      osc1.frequency.linearRampToValueAtTime(baseFreq, now+1.8);
+      osc2.frequency.linearRampToValueAtTime(baseFreq*1.003, now+1.8);
+      subOsc.frequency.linearRampToValueAtTime(baseFreq*0.5, now+1.8);
+    }
+    document.getElementById('freqVal').textContent = Math.round(baseFreq);
+    document.querySelectorAll('.chip').forEach(c=>{
+      c.classList.toggle('active', Math.abs(parseInt(c.dataset.f) - Math.round(baseFreq)) < 1);
+    });
+  }
+
+  const chipsEl = document.getElementById('chips');
+  SOLFEGGIO.forEach(f=>{
+    const c = document.createElement('button');
+    c.className = 'chip'; c.textContent = f; c.dataset.f = f;
+    c.addEventListener('click', ()=> setFreq(f));
+    chipsEl.appendChild(c);
+  });
+
+  document.getElementById('freqUp').addEventListener('click', ()=> setFreq(baseFreq+2));
+  document.getElementById('freqDown').addEventListener('click', ()=> setFreq(baseFreq-2));
+
+  document.getElementById('volumeSlider').addEventListener('input', (e)=>{
+    if(masterGain) masterGain.gain.setTargetAtTime(e.target.value/100, actx.currentTime, 0.05);
+  });
+  document.getElementById('humVolSlider').addEventListener('input', (e)=>{
+    if(humGain) humGain.gain.setTargetAtTime(e.target.value/100 * 0.7, actx.currentTime, 0.05);
+  });
+  document.getElementById('hbVolSlider').addEventListener('input', (e)=>{
+    if(hbGain) hbGain.gain.setTargetAtTime(e.target.value/100, actx.currentTime, 0.05);
+  });
+  document.getElementById('rhythmVolSlider').addEventListener('input', (e)=>{
+    if(rhythmGain) rhythmGain.gain.setTargetAtTime(e.target.value/100, actx.currentTime, 0.05);
+  });
+
+  document.querySelectorAll('[data-hb]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('[data-hb]').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      heartbeatOn = btn.dataset.hb === 'on';
+    });
+  });
+
+  document.querySelectorAll('[data-rhythm]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('[data-rhythm]').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      rhythmMode = btn.dataset.rhythm;
+      if(running) scheduleRhythm(rhythmMode);
+    });
+  });
+
+  const playPauseBtn = document.getElementById('playPause');
+  playPauseBtn.addEventListener('click', ()=>{
+    if(!actx) return;
+    if(running){
+      actx.suspend();
+      playPauseBtn.textContent = '▶';
+      running = false;
+    } else {
+      actx.resume();
+      playPauseBtn.textContent = '⏸';
+      running = true;
+    }
+  });
+
+  document.getElementById('beginBtn').addEventListener('click', ()=>{
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    buildGraph();
+    setFreq(baseFreq);
+    scheduleHeartbeat();
+    scheduleRhythm(rhythmMode);
+    running = true;
+    const overlay = document.getElementById('startOverlay');
+    overlay.style.opacity = '0';
+    setTimeout(()=> overlay.style.display='none', 900);
+    setTimeout(()=>{ document.getElementById('hint').style.transition='opacity 1.5s ease'; }, 100);
+    setTimeout(()=>{ if(!active) document.getElementById('hint').style.opacity = 0.55; }, 500);
+  });
+
+})();
+</script>
+</body>
+</html>
