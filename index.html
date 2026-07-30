@@ -598,7 +598,7 @@ const ORB_IMAGE_SRCS = [];
   requestAnimationFrame(draw);
 
   let actx = null;
-  let masterGain, limiter, humGain, hbGain, hbFilter, hbBassBoost, rhythmGain;
+  let masterGain, limiter, subsonicFilter, humGain, hbGain, hbFilter, hbBassBoost, rhythmGain;
   let panner, distanceFilter, distanceGain, osc1, osc2, subOsc, filter, filter2, breathLFO, filterLFO;
   let running = false;
   let hbTimer = null, rhythmTimer = null;
@@ -631,7 +631,18 @@ const ORB_IMAGE_SRCS = [];
     limiter.attack.value = 0.001;
     limiter.release.value = 0.2;
 
-    masterGain.connect(limiter);
+    // Many phone and laptop speakers can't cleanly reproduce content below
+    // roughly 45-50Hz — they distort, rattle, or buzz trying to, which can
+    // sound identical to "static" even though the digital signal is clean.
+    // The heartbeat and sub-oscillator both reach into that range, so this
+    // gently rolls it off before it ever reaches the speaker.
+    subsonicFilter = actx.createBiquadFilter();
+    subsonicFilter.type = 'highpass';
+    subsonicFilter.frequency.value = 46;
+    subsonicFilter.Q.value = 0.7;
+
+    masterGain.connect(subsonicFilter);
+    subsonicFilter.connect(limiter);
     limiter.connect(actx.destination);
 
     // Simple stereo pan + a filter/gain pair to simulate near/far, instead
@@ -665,7 +676,7 @@ const ORB_IMAGE_SRCS = [];
     osc1 = actx.createOscillator(); osc1.type='sine'; osc1.frequency.value = baseFreq;
     osc2 = actx.createOscillator(); osc2.type='sine'; osc2.frequency.value = baseFreq*1.003;
     const osc2Gain = actx.createGain(); osc2Gain.gain.value = 0.2;
-    subOsc = actx.createOscillator(); subOsc.type='sine'; subOsc.frequency.value = baseFreq*0.5;
+    subOsc = actx.createOscillator(); subOsc.type='sine'; subOsc.frequency.value = baseFreq*0.75;
     const subGain = actx.createGain(); subGain.gain.value = 0.15;
 
     osc1.connect(filter);
@@ -729,9 +740,9 @@ const ORB_IMAGE_SRCS = [];
     const interval = 60000/bpm;
     function beat(){
       if(!heartbeatOn) return;
-      playThump(0,    32, 0.42, 0.5,  hbGain);
-      playThump(0,    55, 0.28, 0.85, hbGain);
-      playThump(0.17, 42, 0.36, 0.62, hbGain);
+      playThump(0,    46, 0.4,  0.5,  hbGain);
+      playThump(0,    68, 0.26, 0.85, hbGain);
+      playThump(0.17, 56, 0.32, 0.62, hbGain);
     }
     beat();
     hbTimer = setInterval(beat, interval);
@@ -797,7 +808,7 @@ const ORB_IMAGE_SRCS = [];
       const now = actx.currentTime;
       osc1.frequency.linearRampToValueAtTime(baseFreq, now+1.8);
       osc2.frequency.linearRampToValueAtTime(baseFreq*1.003, now+1.8);
-      subOsc.frequency.linearRampToValueAtTime(baseFreq*0.5, now+1.8);
+      subOsc.frequency.linearRampToValueAtTime(baseFreq*0.75, now+1.8);
     }
     document.getElementById('freqVal').textContent = Math.round(baseFreq);
     document.querySelectorAll('.chip').forEach(c=>{
