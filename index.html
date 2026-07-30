@@ -595,7 +595,7 @@ const ORB_IMAGE_SRCS = [];
   requestAnimationFrame(draw);
 
   let actx = null;
-  let masterGain, humGain, hbGain, hbFilter, hbBassBoost, rhythmGain;
+  let masterGain, limiter, humGain, hbGain, hbFilter, hbBassBoost, rhythmGain;
   let panner, osc1, osc2, subOsc, filter, filter2, breathLFO, filterLFO;
   let running = false;
   let hbTimer = null, rhythmTimer = null;
@@ -608,7 +608,16 @@ const ORB_IMAGE_SRCS = [];
   function buildGraph(){
     masterGain = actx.createGain();
     masterGain.gain.value = 0.52;
-    masterGain.connect(actx.destination);
+
+    limiter = actx.createDynamicsCompressor();
+    limiter.threshold.value = -6;
+    limiter.knee.value = 12;
+    limiter.ratio.value = 8;
+    limiter.attack.value = 0.003;
+    limiter.release.value = 0.25;
+
+    masterGain.connect(limiter);
+    limiter.connect(actx.destination);
 
     panner = actx.createPanner();
     panner.panningModel = 'HRTF';
@@ -740,13 +749,20 @@ const ORB_IMAGE_SRCS = [];
     }
   }
 
+  function rampParam(param, target, dur){
+    if(!param) return;
+    const now = actx.currentTime;
+    param.cancelScheduledValues(now);
+    param.setValueAtTime(param.value, now);
+    param.linearRampToValueAtTime(target, now + dur);
+  }
+
   function updateSpatial(){
     if(!panner) return;
     const x = (smoothX - 0.5) * 6;
     const z = -4 + smoothY * 6;
-    const now = actx.currentTime;
-    panner.positionX.linearRampToValueAtTime(x, now+0.08);
-    panner.positionZ.linearRampToValueAtTime(z, now+0.08);
+    rampParam(panner.positionX, x, 0.08);
+    rampParam(panner.positionZ, z, 0.08);
   }
   setInterval(updateSpatial, 90);
 
@@ -775,18 +791,28 @@ const ORB_IMAGE_SRCS = [];
   document.getElementById('freqUp').addEventListener('click', ()=> setFreq(baseFreq+2));
   document.getElementById('freqDown').addEventListener('click', ()=> setFreq(baseFreq-2));
 
-  document.getElementById('volumeSlider').addEventListener('input', (e)=>{
-    if(masterGain) masterGain.gain.setTargetAtTime(e.target.value/100, actx.currentTime, 0.05);
-  });
-  document.getElementById('humVolSlider').addEventListener('input', (e)=>{
-    if(humGain) humGain.gain.setTargetAtTime(e.target.value/100 * 0.7, actx.currentTime, 0.05);
-  });
-  document.getElementById('hbVolSlider').addEventListener('input', (e)=>{
-    if(hbGain) hbGain.gain.setTargetAtTime(e.target.value/100, actx.currentTime, 0.05);
-  });
-  document.getElementById('rhythmVolSlider').addEventListener('input', (e)=>{
-    if(rhythmGain) rhythmGain.gain.setTargetAtTime(e.target.value/100, actx.currentTime, 0.05);
-  });
+  // Throttle slider->audio updates to once per frame (sliders can fire many
+  // 'input' events per second while dragging; applying each one directly
+  // stacks overlapping ramps and causes crackle). rampParam also anchors
+  // each new ramp cleanly instead of layering on top of the last one.
+  function bindVolumeSlider(sliderEl, getParam, scale, dur){
+    let pending = null, scheduled = false;
+    sliderEl.addEventListener('input', (e)=>{
+      pending = (e.target.value/100) * scale;
+      if(scheduled) return;
+      scheduled = true;
+      requestAnimationFrame(()=>{
+        scheduled = false;
+        const param = getParam();
+        if(param && actx) rampParam(param, pending, dur);
+      });
+    });
+  }
+
+  bindVolumeSlider(document.getElementById('volumeSlider'), ()=> masterGain && masterGain.gain, 1, 0.08);
+  bindVolumeSlider(document.getElementById('humVolSlider'), ()=> humGain && humGain.gain, 0.7, 0.08);
+  bindVolumeSlider(document.getElementById('hbVolSlider'), ()=> hbGain && hbGain.gain, 1, 0.08);
+  bindVolumeSlider(document.getElementById('rhythmVolSlider'), ()=> rhythmGain && rhythmGain.gain, 1, 0.08);
 
   document.querySelectorAll('[data-hb]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
