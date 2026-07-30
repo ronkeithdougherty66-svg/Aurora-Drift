@@ -194,15 +194,15 @@
   <div class="sbDivider"></div>
 
   <span class="sbLabel">Master</span>
-  <div class="vWrap"><input type="range" class="vSlider" id="volumeSlider" min="0" max="100" value="52"></div>
+  <div class="vWrap"><input type="range" class="vSlider" id="volumeSlider" min="0" max="100" value="44"></div>
 
   <span class="sbLabel">Tone</span>
-  <div class="vWrap"><input type="range" class="vSlider" id="humVolSlider" min="0" max="100" value="34"></div>
+  <div class="vWrap"><input type="range" class="vSlider" id="humVolSlider" min="0" max="100" value="30"></div>
 
   <div class="sbDivider"></div>
 
   <span class="sbLabel">Heart</span>
-  <div class="vWrap"><input type="range" class="vSlider" id="hbVolSlider" min="0" max="100" value="85"></div>
+  <div class="vWrap"><input type="range" class="vSlider" id="hbVolSlider" min="0" max="100" value="62"></div>
   <div class="toggleRow">
     <button class="toggleBtnSm active" data-hb="on">On</button>
     <button class="toggleBtnSm" data-hb="off">Off</button>
@@ -211,7 +211,7 @@
   <div class="sbDivider"></div>
 
   <span class="sbLabel">Rhythm</span>
-  <div class="vWrap"><input type="range" class="vSlider" id="rhythmVolSlider" min="0" max="100" value="55"></div>
+  <div class="vWrap"><input type="range" class="vSlider" id="rhythmVolSlider" min="0" max="100" value="42"></div>
   <div class="toggleRow">
     <button class="toggleBtnSm active" data-rhythm="none">None</button>
     <button class="toggleBtnSm" data-rhythm="drum">Drum</button>
@@ -605,6 +605,18 @@ const ORB_IMAGE_SRCS = [];
 
   const SOLFEGGIO = [174, 285, 396];
 
+  // Every audio layer's ceiling, tied directly to its slider (0-100%).
+  // Lowered from earlier versions to leave real headroom against clipping,
+  // and buildGraph() now reads these same values for its starting gain —
+  // previously the heartbeat's starting gain (1.15) didn't match its
+  // slider's displayed position (85%), so it silently started louder than
+  // the UI showed. That mismatch is fixed by using this helper everywhere.
+  const VOL_SCALE = { volumeSlider: 1, humVolSlider: 0.5, hbVolSlider: 0.62, rhythmVolSlider: 0.7 };
+  function sliderTarget(id){
+    const el = document.getElementById(id);
+    return (el.value/100) * VOL_SCALE[id];
+  }
+
   function makeSoftClipCurve(amount){
     const n = 4096;
     const curve = new Float32Array(n);
@@ -618,7 +630,7 @@ const ORB_IMAGE_SRCS = [];
 
   function buildGraph(){
     masterGain = actx.createGain();
-    masterGain.gain.value = 0.52;
+    masterGain.gain.value = sliderTarget('volumeSlider');
 
     limiter = actx.createDynamicsCompressor();
     limiter.threshold.value = -14;
@@ -656,13 +668,13 @@ const ORB_IMAGE_SRCS = [];
     filter2.Q.value = 0.25;
 
     humGain = actx.createGain();
-    humGain.gain.value = 0.34;
+    humGain.gain.value = sliderTarget('humVolSlider');
 
     osc1 = actx.createOscillator(); osc1.type='sine'; osc1.frequency.value = baseFreq;
     osc2 = actx.createOscillator(); osc2.type='sine'; osc2.frequency.value = baseFreq*1.003;
-    const osc2Gain = actx.createGain(); osc2Gain.gain.value = 0.26;
+    const osc2Gain = actx.createGain(); osc2Gain.gain.value = 0.2;
     subOsc = actx.createOscillator(); subOsc.type='sine'; subOsc.frequency.value = baseFreq*0.5;
-    const subGain = actx.createGain(); subGain.gain.value = 0.2;
+    const subGain = actx.createGain(); subGain.gain.value = 0.15;
 
     osc1.connect(filter);
     osc2.connect(osc2Gain).connect(filter);
@@ -685,7 +697,7 @@ const ORB_IMAGE_SRCS = [];
     filterLFO.start();
 
     hbGain = actx.createGain();
-    hbGain.gain.value = 1.15;
+    hbGain.gain.value = sliderTarget('hbVolSlider');
     hbFilter = actx.createBiquadFilter();
     hbFilter.type = 'lowpass';
     hbFilter.frequency.value = 150;
@@ -693,13 +705,13 @@ const ORB_IMAGE_SRCS = [];
     hbBassBoost = actx.createBiquadFilter();
     hbBassBoost.type = 'lowshelf';
     hbBassBoost.frequency.value = 100;
-    hbBassBoost.gain.value = 8;
+    hbBassBoost.gain.value = 4;
     hbGain.connect(hbFilter);
     hbFilter.connect(hbBassBoost);
     hbBassBoost.connect(masterGain);
 
     rhythmGain = actx.createGain();
-    rhythmGain.gain.value = 0.55;
+    rhythmGain.gain.value = sliderTarget('rhythmVolSlider');
     rhythmGain.connect(masterGain);
   }
 
@@ -723,9 +735,9 @@ const ORB_IMAGE_SRCS = [];
     const interval = 60000/bpm;
     function beat(){
       if(!heartbeatOn) return;
-      playThump(0,    32, 0.42, 0.75, hbGain);
-      playThump(0,    55, 0.28, 1.25, hbGain);
-      playThump(0.17, 42, 0.36, 0.95, hbGain);
+      playThump(0,    32, 0.42, 0.5,  hbGain);
+      playThump(0,    55, 0.28, 0.85, hbGain);
+      playThump(0.17, 42, 0.36, 0.62, hbGain);
     }
     beat();
     hbTimer = setInterval(beat, interval);
@@ -835,10 +847,10 @@ const ORB_IMAGE_SRCS = [];
     });
   }
 
-  bindVolumeSlider(document.getElementById('volumeSlider'), ()=> masterGain && masterGain.gain, 1, 0.08);
-  bindVolumeSlider(document.getElementById('humVolSlider'), ()=> humGain && humGain.gain, 0.7, 0.08);
-  bindVolumeSlider(document.getElementById('hbVolSlider'), ()=> hbGain && hbGain.gain, 1, 0.08);
-  bindVolumeSlider(document.getElementById('rhythmVolSlider'), ()=> rhythmGain && rhythmGain.gain, 1, 0.08);
+  bindVolumeSlider(document.getElementById('volumeSlider'), ()=> masterGain && masterGain.gain, VOL_SCALE.volumeSlider, 0.08);
+  bindVolumeSlider(document.getElementById('humVolSlider'), ()=> humGain && humGain.gain, VOL_SCALE.humVolSlider, 0.08);
+  bindVolumeSlider(document.getElementById('hbVolSlider'), ()=> hbGain && hbGain.gain, VOL_SCALE.hbVolSlider, 0.08);
+  bindVolumeSlider(document.getElementById('rhythmVolSlider'), ()=> rhythmGain && rhythmGain.gain, VOL_SCALE.rhythmVolSlider, 0.08);
 
   document.querySelectorAll('[data-hb]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
