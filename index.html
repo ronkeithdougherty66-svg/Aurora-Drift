@@ -598,8 +598,8 @@ const ORB_IMAGE_SRCS = [];
   requestAnimationFrame(draw);
 
   let actx = null;
-  let masterGain, limiter, softClip, humGain, hbGain, hbFilter, hbBassBoost, rhythmGain;
-  let panner, osc1, osc2, subOsc, filter, filter2, breathLFO, filterLFO;
+  let masterGain, limiter, humGain, hbGain, hbFilter, hbBassBoost, rhythmGain;
+  let panner, distanceFilter, distanceGain, osc1, osc2, subOsc, filter, filter2, breathLFO, filterLFO;
   let running = false;
   let hbTimer = null, rhythmTimer = null;
   let baseFreq = 136.1;
@@ -620,45 +620,34 @@ const ORB_IMAGE_SRCS = [];
     return (el.value/100) * VOL_SCALE[id];
   }
 
-  function makeSoftClipCurve(amount){
-    const n = 4096;
-    const curve = new Float32Array(n);
-    const norm = Math.tanh(amount);
-    for(let i=0;i<n;i++){
-      const x = (i*2)/n - 1;
-      curve[i] = Math.tanh(amount*x) / norm;
-    }
-    return curve;
-  }
-
   function buildGraph(){
     masterGain = actx.createGain();
     masterGain.gain.value = sliderTarget('volumeSlider');
 
     limiter = actx.createDynamicsCompressor();
-    limiter.threshold.value = -14;
+    limiter.threshold.value = -10;
     limiter.knee.value = 6;
-    limiter.ratio.value = 16;
+    limiter.ratio.value = 14;
     limiter.attack.value = 0.001;
     limiter.release.value = 0.2;
 
-    softClip = actx.createWaveShaper();
-    softClip.curve = makeSoftClipCurve(2.2);
-    softClip.oversample = '4x';
-
     masterGain.connect(limiter);
-    limiter.connect(softClip);
-    softClip.connect(actx.destination);
+    limiter.connect(actx.destination);
 
-    panner = actx.createPanner();
-    panner.panningModel = 'HRTF';
-    panner.distanceModel = 'inverse';
-    panner.refDistance = 1;
-    panner.maxDistance = 12;
-    panner.rolloffFactor = 1;
-    panner.positionX.value = 0;
-    panner.positionY.value = 0;
-    panner.positionZ.value = -2;
+    // Simple stereo pan + a filter/gain pair to simulate near/far, instead
+    // of an HRTF PannerNode. HRTF convolves through real measured ear
+    // impulse responses, which aren't gain-normalized (some angles/
+    // frequencies are boosted, not just attenuated) and can click audibly
+    // when position changes quickly — a known cross-browser quirk, not a
+    // performance issue, so it shows up on desktop too. This gives the
+    // same left/right + near/far feel with none of that risk.
+    panner = actx.createStereoPanner();
+    distanceFilter = actx.createBiquadFilter();
+    distanceFilter.type = 'lowpass';
+    distanceFilter.frequency.value = 2000;
+    distanceFilter.Q.value = 0.3;
+    distanceGain = actx.createGain();
+    distanceGain.gain.value = 1;
 
     filter = actx.createBiquadFilter();
     filter.type = 'lowpass';
@@ -683,8 +672,10 @@ const ORB_IMAGE_SRCS = [];
     osc2.connect(osc2Gain).connect(filter);
     subOsc.connect(subGain).connect(filter);
     filter.connect(filter2);
-    filter2.connect(panner);
-    panner.connect(humGain);
+    filter2.connect(distanceFilter);
+    distanceFilter.connect(panner);
+    panner.connect(distanceGain);
+    distanceGain.connect(humGain);
     humGain.connect(masterGain);
 
     osc1.start(); osc2.start(); subOsc.start();
@@ -790,20 +781,13 @@ const ORB_IMAGE_SRCS = [];
 
   function updateSpatial(){
     if(!panner) return;
-    let x = (smoothX - 0.5) * 6;
-    let z = -4 + smoothY * 6;
-    // The 'inverse' distance model computes gain as refDistance/distance —
-    // as distance approaches 0 that approaches infinite gain. The touch bar
-    // can otherwise move the source right through that zero point, so clamp
-    // the minimum distance to stay at/beyond refDistance (1) at all times.
-    const dist = Math.sqrt(x*x + z*z);
-    const MIN_DIST = 1.3;
-    if(dist < MIN_DIST){
-      const scale = MIN_DIST / Math.max(dist, 0.0001);
-      x *= scale; z *= scale;
-    }
-    rampParam(panner.positionX, x, 0.08);
-    rampParam(panner.positionZ, z, 0.08);
+    const pan = Math.max(-1, Math.min(1, (smoothX - 0.5) * 1.9));
+    const farness = 1 - smoothY; // smoothY: 0 (top of bar, far) .. 1 (bottom, near)
+    const targetFreq = 2200 - farness*1650;   // near = bright, far = muffled
+    const targetGain = 1 - farness*0.5;       // near = full, far = quieter (not silent)
+    rampParam(panner.pan, pan, 0.12);
+    rampParam(distanceFilter.frequency, targetFreq, 0.15);
+    rampParam(distanceGain.gain, targetGain, 0.15);
   }
   setInterval(updateSpatial, 90);
 
