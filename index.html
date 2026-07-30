@@ -595,7 +595,7 @@ const ORB_IMAGE_SRCS = [];
   requestAnimationFrame(draw);
 
   let actx = null;
-  let masterGain, limiter, humGain, hbGain, hbFilter, hbBassBoost, rhythmGain;
+  let masterGain, limiter, softClip, humGain, hbGain, hbFilter, hbBassBoost, rhythmGain;
   let panner, osc1, osc2, subOsc, filter, filter2, breathLFO, filterLFO;
   let running = false;
   let hbTimer = null, rhythmTimer = null;
@@ -605,19 +605,35 @@ const ORB_IMAGE_SRCS = [];
 
   const SOLFEGGIO = [174, 285, 396];
 
+  function makeSoftClipCurve(amount){
+    const n = 4096;
+    const curve = new Float32Array(n);
+    const norm = Math.tanh(amount);
+    for(let i=0;i<n;i++){
+      const x = (i*2)/n - 1;
+      curve[i] = Math.tanh(amount*x) / norm;
+    }
+    return curve;
+  }
+
   function buildGraph(){
     masterGain = actx.createGain();
     masterGain.gain.value = 0.52;
 
     limiter = actx.createDynamicsCompressor();
-    limiter.threshold.value = -6;
-    limiter.knee.value = 12;
-    limiter.ratio.value = 8;
-    limiter.attack.value = 0.003;
-    limiter.release.value = 0.25;
+    limiter.threshold.value = -14;
+    limiter.knee.value = 6;
+    limiter.ratio.value = 16;
+    limiter.attack.value = 0.001;
+    limiter.release.value = 0.2;
+
+    softClip = actx.createWaveShaper();
+    softClip.curve = makeSoftClipCurve(2.2);
+    softClip.oversample = '4x';
 
     masterGain.connect(limiter);
-    limiter.connect(actx.destination);
+    limiter.connect(softClip);
+    softClip.connect(actx.destination);
 
     panner = actx.createPanner();
     panner.panningModel = 'HRTF';
@@ -759,8 +775,18 @@ const ORB_IMAGE_SRCS = [];
 
   function updateSpatial(){
     if(!panner) return;
-    const x = (smoothX - 0.5) * 6;
-    const z = -4 + smoothY * 6;
+    let x = (smoothX - 0.5) * 6;
+    let z = -4 + smoothY * 6;
+    // The 'inverse' distance model computes gain as refDistance/distance —
+    // as distance approaches 0 that approaches infinite gain. The touch bar
+    // can otherwise move the source right through that zero point, so clamp
+    // the minimum distance to stay at/beyond refDistance (1) at all times.
+    const dist = Math.sqrt(x*x + z*z);
+    const MIN_DIST = 1.3;
+    if(dist < MIN_DIST){
+      const scale = MIN_DIST / Math.max(dist, 0.0001);
+      x *= scale; z *= scale;
+    }
     rampParam(panner.positionX, x, 0.08);
     rampParam(panner.positionZ, z, 0.08);
   }
